@@ -318,12 +318,19 @@ class Command(BaseCommand):
     @staticmethod
     def store_usage_in_database(allocation: Allocation, date: str, usage_info):
         """Store usage information in the database for each SU type.
-        
+
         Args:
             allocation: The allocation to store usage for
             date: The date string in YYYY-MM-DD format
             usage_info: UsageInfo pydantic model instance with SU type charges
         """
+        num_types = len(usage_info.root)
+        if num_types == 0:
+            logger.info(
+                f"No usage data to store for allocation {allocation.id} on {date}"
+            )
+            return
+
         for su_type, value in usage_info.root.items():
             UsageInfoModel.objects.update_or_create(
                 allocation=allocation,
@@ -333,16 +340,15 @@ class Command(BaseCommand):
             )
         logger.info(
             f"Stored usage data for allocation {allocation.id} on {date}: "
-            f"{len(usage_info.root)} SU types"
+            f"{num_types} SU types"
         )
 
     @staticmethod
     def handle_remove(date: str):
         """Remove all usage entries for the specified date.
-        
+
         Args:
             date: The date string in YYYY-MM-DD format for which to remove entries
         """
         deleted_count, _ = UsageInfoModel.objects.filter(date=date).delete()
         logger.info(f"Removed {deleted_count} usage entries for date {date}")
-        print(f"Removed {deleted_count} usage entries for date {date}")

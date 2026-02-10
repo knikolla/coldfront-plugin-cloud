@@ -8,7 +8,7 @@ class UsageInfo(models.Model):
     allocation = models.ForeignKey(
         Allocation,
         on_delete=models.CASCADE,
-        related_name='usage_info',
+        related_name='daily_usage_records',
         help_text='The allocation this usage belongs to'
     )
     date = models.DateField(
