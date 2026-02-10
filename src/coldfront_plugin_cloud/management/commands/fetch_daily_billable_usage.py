@@ -12,7 +12,7 @@ from coldfront.core.utils.common import import_from_settings
 from coldfront_plugin_cloud import usage_models
 from coldfront_plugin_cloud.usage_models import validate_date_str
 from coldfront_plugin_cloud import utils
-from coldfront_plugin_cloud.models import AllocationDailyBillableUsage
+from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as UsageInfo
 
 import boto3
 from django.core.management.base import BaseCommand
@@ -133,7 +133,6 @@ class Command(BaseCommand):
                 )
                 continue
 
-            # Store usage information in the database
             self.store_usage_in_database(allocation, date, new_usage)
 
             # Only update the latest value if the processed date is newer or same date.
@@ -324,24 +323,13 @@ class Command(BaseCommand):
             date: The date string in YYYY-MM-DD format
             usage_info: UsageInfo pydantic model instance with SU type charges
         """
-        num_types = len(usage_info.root)
-        if num_types == 0:
-            logger.info(
-                f"No usage data to store for allocation {allocation.id} on {date}"
-            )
-            return
-
         for su_type, value in usage_info.root.items():
-            AllocationDailyBillableUsage.objects.update_or_create(
+            UsageInfo.objects.update_or_create(
                 allocation=allocation,
                 date=date,
                 su_type=su_type,
                 defaults={'value': value}
             )
-        logger.info(
-            f"Stored usage data for allocation {allocation.id} on {date}: "
-            f"{num_types} SU types"
-        )
 
     @staticmethod
     def handle_remove(date: str):
@@ -350,5 +338,5 @@ class Command(BaseCommand):
         Args:
             date: The date string in YYYY-MM-DD format for which to remove entries
         """
-        deleted_count, _ = AllocationDailyBillableUsage.objects.filter(date=date).delete()
+        deleted_count, _ = UsageInfo.objects.filter(date=date).delete()
         logger.info(f"Removed {deleted_count} usage entries for date {date}")
