@@ -247,8 +247,8 @@ class TestFetchDailyBillableUsage(base.TestBase):
     @patch(
         "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.Command.get_allocation_usage"
     )
-    def test_database_insertion(self, mock_get_allocation_usage):
-        """Test that usage data is stored in the database."""
+    def test_database_insertion_and_removal(self, mock_get_allocation_usage):
+        """Test database insertion, updates, and removal of usage entries."""
         from coldfront_plugin_cloud.models import AllocationDailyBillableUsage
 
         mock_get_allocation_usage.side_effect = [
@@ -270,6 +270,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
         # Verify no entries before running command
         self.assertEqual(AllocationDailyBillableUsage.objects.count(), 0)
 
+        # Test initial insertion
         call_command("fetch_daily_billable_usage", date="2025-11-15")
 
         # Verify database entries were created
@@ -288,14 +289,14 @@ class TestFetchDailyBillableUsage(base.TestBase):
         storage_usage = usage_entries.get(su_type="Storage")
         self.assertEqual(storage_usage.value, Decimal("30.12"))
 
-        # Test update_or_create by running again with different values
+        # Test update_or_create by running again with different values for same date
         mock_get_allocation_usage.side_effect = [
             usage_models.UsageInfo({"OpenStack CPU": "110.00", "OpenStack GPU": "55.00"}),
             usage_models.UsageInfo({"Storage": "35.00"}),
         ]
         call_command("fetch_daily_billable_usage", date="2025-11-15")
 
-        # Should still have 3 entries
+        # Should still have 3 entries (not duplicates)
         usage_entries = AllocationDailyBillableUsage.objects.filter(
             allocation=allocation_1, date="2025-11-15"
         )
@@ -305,52 +306,22 @@ class TestFetchDailyBillableUsage(base.TestBase):
         cpu_usage = usage_entries.get(su_type="OpenStack CPU")
         self.assertEqual(cpu_usage.value, Decimal("110.00"))
 
-    @patch(
-        "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.RESOURCES_DAILY_ENABLED",
-        ["FakeProd"],
-    )
-    @patch(
-        "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.Command.get_allocation_usage"
-    )
-    def test_remove_parameter(self, mock_get_allocation_usage):
-        """Test that --remove parameter deletes usage entries for a given date."""
-        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage
-
-        mock_get_allocation_usage.side_effect = [
-            usage_models.UsageInfo({"OpenStack CPU": "100.00"}),
-            usage_models.UsageInfo({"Storage": "30.12"}),
-        ]
-
-        fakeprod = self.new_openstack_resource(
-            name="FakeProd", internal_name="FakeProd"
-        )
-        prod_project = self.new_project()
-        allocation_1 = self.new_allocation(
-            project=prod_project, resource=fakeprod, quantity=1, status="Active"
-        )
-        utils.set_attribute_on_allocation(
-            allocation_1, attributes.ALLOCATION_PROJECT_ID, "test-allocation-1"
-        )
-
-        # First, add some data
-        call_command("fetch_daily_billable_usage", date="2025-11-15")
-
-        # Add data for another date
+        # Add data for another date to test selective removal
         mock_get_allocation_usage.side_effect = [
             usage_models.UsageInfo({"OpenStack CPU": "120.00"}),
             usage_models.UsageInfo({"Storage": "40.00"}),
         ]
         call_command("fetch_daily_billable_usage", date="2025-11-16")
 
-        # Verify data exists
+        # Verify data exists for both dates
         self.assertEqual(
-            AllocationDailyBillableUsage.objects.filter(date="2025-11-15").count(), 2
+            AllocationDailyBillableUsage.objects.filter(date="2025-11-15").count(), 3
         )
         self.assertEqual(
             AllocationDailyBillableUsage.objects.filter(date="2025-11-16").count(), 2
         )
 
-        # Remove data for 2025-11-15
+        # Test removal - remove data for 2025-11-15
         call_command("fetch_daily_billable_usage", date="2025-11-15", remove=True)
 
         # Verify data for 2025-11-15 is deleted
@@ -421,4 +392,40 @@ class TestFetchDailyBillableUsage(base.TestBase):
         )
         self.assertEqual(
             alloc2_entries.get(su_type="OpenStack CPU").value, Decimal("200.00")
+        )
+
+        # Test updating with same date but different values - should update, not error
+        mock_get_allocation_usage.side_effect = [
+            usage_models.UsageInfo({"OpenStack CPU": "150.00"}),
+            usage_models.UsageInfo({"Storage": "35.00"}),
+            usage_models.UsageInfo({"OpenStack CPU": "250.00"}),
+            usage_models.UsageInfo({"Storage": "55.00"}),
+        ]
+
+        # This should not raise any errors and should update existing values
+        call_command("fetch_daily_billable_usage", date="2025-11-15")
+
+        # Verify counts remain the same (no duplicates)
+        alloc1_entries = AllocationDailyBillableUsage.objects.filter(
+            allocation=allocation_1, date="2025-11-15"
+        )
+        alloc2_entries = AllocationDailyBillableUsage.objects.filter(
+            allocation=allocation_2, date="2025-11-15"
+        )
+
+        self.assertEqual(alloc1_entries.count(), 2)
+        self.assertEqual(alloc2_entries.count(), 2)
+
+        # Verify values were updated
+        self.assertEqual(
+            alloc1_entries.get(su_type="OpenStack CPU").value, Decimal("150.00")
+        )
+        self.assertEqual(
+            alloc1_entries.get(su_type="Storage").value, Decimal("35.00")
+        )
+        self.assertEqual(
+            alloc2_entries.get(su_type="OpenStack CPU").value, Decimal("250.00")
+        )
+        self.assertEqual(
+            alloc2_entries.get(su_type="Storage").value, Decimal("55.00")
         )
