@@ -249,7 +249,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
     )
     def test_database_insertion(self, mock_get_allocation_usage):
         """Test that usage data is stored in the database."""
-        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as UsageInfoModel
+        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as AllocationDailyBillableUsage
 
         mock_get_allocation_usage.side_effect = [
             usage_models.UsageInfo({"OpenStack CPU": "100.00", "OpenStack GPU": "50.00"}),
@@ -268,12 +268,12 @@ class TestFetchDailyBillableUsage(base.TestBase):
         )
 
         # Verify no entries before running command
-        self.assertEqual(UsageInfoModel.objects.count(), 0)
+        self.assertEqual(AllocationDailyBillableUsage.objects.count(), 0)
 
         call_command("fetch_daily_billable_usage", date="2025-11-15")
 
         # Verify database entries were created
-        usage_entries = UsageInfoModel.objects.filter(
+        usage_entries = AllocationDailyBillableUsage.objects.filter(
             allocation=allocation_1, date="2025-11-15"
         )
         self.assertEqual(usage_entries.count(), 3)
@@ -296,7 +296,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
         call_command("fetch_daily_billable_usage", date="2025-11-15")
 
         # Should still have 3 entries
-        usage_entries = UsageInfoModel.objects.filter(
+        usage_entries = AllocationDailyBillableUsage.objects.filter(
             allocation=allocation_1, date="2025-11-15"
         )
         self.assertEqual(usage_entries.count(), 3)
@@ -314,7 +314,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
     )
     def test_remove_parameter(self, mock_get_allocation_usage):
         """Test that --remove parameter deletes usage entries for a given date."""
-        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as UsageInfoModel
+        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as AllocationDailyBillableUsage
 
         mock_get_allocation_usage.side_effect = [
             usage_models.UsageInfo({"OpenStack CPU": "100.00"}),
@@ -344,10 +344,10 @@ class TestFetchDailyBillableUsage(base.TestBase):
 
         # Verify data exists
         self.assertEqual(
-            UsageInfoModel.objects.filter(date="2025-11-15").count(), 2
+            AllocationDailyBillableUsage.objects.filter(date="2025-11-15").count(), 2
         )
         self.assertEqual(
-            UsageInfoModel.objects.filter(date="2025-11-16").count(), 2
+            AllocationDailyBillableUsage.objects.filter(date="2025-11-16").count(), 2
         )
 
         # Remove data for 2025-11-15
@@ -355,12 +355,12 @@ class TestFetchDailyBillableUsage(base.TestBase):
 
         # Verify data for 2025-11-15 is deleted
         self.assertEqual(
-            UsageInfoModel.objects.filter(date="2025-11-15").count(), 0
+            AllocationDailyBillableUsage.objects.filter(date="2025-11-15").count(), 0
         )
 
         # Verify data for 2025-11-16 still exists
         self.assertEqual(
-            UsageInfoModel.objects.filter(date="2025-11-16").count(), 2
+            AllocationDailyBillableUsage.objects.filter(date="2025-11-16").count(), 2
         )
 
     @patch(
@@ -372,7 +372,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
     )
     def test_multiple_allocations_same_date(self, mock_get_allocation_usage):
         """Test that multiple allocations can store usage for the same date."""
-        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as UsageInfoModel
+        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as AllocationDailyBillableUsage
 
         fakeprod = self.new_openstack_resource(
             name="FakeProd", internal_name="FakeProd"
@@ -405,10 +405,10 @@ class TestFetchDailyBillableUsage(base.TestBase):
         call_command("fetch_daily_billable_usage", date="2025-11-15")
 
         # Verify both allocations have data
-        alloc1_entries = UsageInfoModel.objects.filter(
+        alloc1_entries = AllocationDailyBillableUsage.objects.filter(
             allocation=allocation_1, date="2025-11-15"
         )
-        alloc2_entries = UsageInfoModel.objects.filter(
+        alloc2_entries = AllocationDailyBillableUsage.objects.filter(
             allocation=allocation_2, date="2025-11-15"
         )
 
