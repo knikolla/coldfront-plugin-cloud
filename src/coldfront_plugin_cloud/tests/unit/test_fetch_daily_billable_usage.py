@@ -249,7 +249,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
     )
     def test_database_insertion(self, mock_get_allocation_usage):
         """Test that usage data is stored in the database."""
-        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as AllocationDailyBillableUsage
+        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage
 
         mock_get_allocation_usage.side_effect = [
             usage_models.UsageInfo({"OpenStack CPU": "100.00", "OpenStack GPU": "50.00"}),
@@ -314,7 +314,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
     )
     def test_remove_parameter(self, mock_get_allocation_usage):
         """Test that --remove parameter deletes usage entries for a given date."""
-        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as AllocationDailyBillableUsage
+        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage
 
         mock_get_allocation_usage.side_effect = [
             usage_models.UsageInfo({"OpenStack CPU": "100.00"}),
@@ -372,7 +372,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
     )
     def test_multiple_allocations_same_date(self, mock_get_allocation_usage):
         """Test that multiple allocations can store usage for the same date."""
-        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as AllocationDailyBillableUsage
+        from coldfront_plugin_cloud.models import AllocationDailyBillableUsage
 
         fakeprod = self.new_openstack_resource(
             name="FakeProd", internal_name="FakeProd"
