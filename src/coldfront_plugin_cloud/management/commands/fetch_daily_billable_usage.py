@@ -12,7 +12,7 @@ from coldfront.core.utils.common import import_from_settings
 from coldfront_plugin_cloud import usage_models
 from coldfront_plugin_cloud.usage_models import validate_date_str
 from coldfront_plugin_cloud import utils
-from coldfront_plugin_cloud.models import AllocationDailyBillableUsage as UsageInfo
+from coldfront_plugin_cloud.models import AllocationDailyBillableUsage
 
 import boto3
 from django.core.management.base import BaseCommand
@@ -324,7 +324,7 @@ class Command(BaseCommand):
             usage_info: UsageInfo pydantic model instance with SU type charges
         """
         for su_type, value in usage_info.root.items():
-            UsageInfo.objects.update_or_create(
+            AllocationDailyBillableUsage.objects.update_or_create(
                 allocation=allocation,
                 date=date,
                 su_type=su_type,
@@ -338,5 +338,5 @@ class Command(BaseCommand):
         Args:
             date: The date string in YYYY-MM-DD format for which to remove entries
         """
-        deleted_count, _ = UsageInfo.objects.filter(date=date).delete()
+        deleted_count, _ = AllocationDailyBillableUsage.objects.filter(date=date).delete()
         logger.info(f"Removed {deleted_count} usage entries for date {date}")
