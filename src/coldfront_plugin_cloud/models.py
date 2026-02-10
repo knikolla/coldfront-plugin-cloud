@@ -4,7 +4,7 @@ from coldfront.core.allocation.models import Allocation
 
 class UsageInfo(models.Model):
     """Stores daily billable usage for allocations by SU type."""
-    
+
     allocation = models.ForeignKey(
         Allocation,
         on_delete=models.CASCADE,

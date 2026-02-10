@@ -334,7 +334,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
 
         # First, add some data
         call_command("fetch_daily_billable_usage", date="2025-11-15")
-        
+
         # Add data for another date
         mock_get_allocation_usage.side_effect = [
             usage_models.UsageInfo({"OpenStack CPU": "120.00"}),
@@ -379,14 +379,14 @@ class TestFetchDailyBillableUsage(base.TestBase):
         )
         prod_project1 = self.new_project()
         prod_project2 = self.new_project()
-        
+
         allocation_1 = self.new_allocation(
             project=prod_project1, resource=fakeprod, quantity=1, status="Active"
         )
         allocation_2 = self.new_allocation(
             project=prod_project2, resource=fakeprod, quantity=1, status="Active"
         )
-        
+
         utils.set_attribute_on_allocation(
             allocation_1, attributes.ALLOCATION_PROJECT_ID, "test-allocation-1"
         )
@@ -411,10 +411,10 @@ class TestFetchDailyBillableUsage(base.TestBase):
         alloc2_entries = UsageInfoModel.objects.filter(
             allocation=allocation_2, date="2025-11-15"
         )
-        
+
         self.assertEqual(alloc1_entries.count(), 2)
         self.assertEqual(alloc2_entries.count(), 2)
-        
+
         # Verify values are correct for each allocation
         self.assertEqual(
             alloc1_entries.get(su_type="OpenStack CPU").value, Decimal("100.00")
