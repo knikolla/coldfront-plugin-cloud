@@ -238,3 +238,186 @@ class TestFetchDailyBillableUsage(base.TestBase):
                 receiver_list=[allocation_1.project.pi.email],
                 cc=[manager.email],
             )
+
+    @patch(
+        "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.RESOURCES_DAILY_ENABLED",
+        ["FakeProd"],
+    )
+    @patch(
+        "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.Command.get_allocation_usage"
+    )
+    def test_database_insertion(self, mock_get_allocation_usage):
+        """Test that usage data is stored in the database."""
+        from coldfront_plugin_cloud.models import UsageInfo as UsageInfoModel
+
+        mock_get_allocation_usage.side_effect = [
+            usage_models.UsageInfo({"OpenStack CPU": "100.00", "OpenStack GPU": "50.00"}),
+            usage_models.UsageInfo({"Storage": "30.12"}),
+        ]
+
+        fakeprod = self.new_openstack_resource(
+            name="FakeProd", internal_name="FakeProd"
+        )
+        prod_project = self.new_project()
+        allocation_1 = self.new_allocation(
+            project=prod_project, resource=fakeprod, quantity=1, status="Active"
+        )
+        utils.set_attribute_on_allocation(
+            allocation_1, attributes.ALLOCATION_PROJECT_ID, "test-allocation-1"
+        )
+
+        # Verify no entries before running command
+        self.assertEqual(UsageInfoModel.objects.count(), 0)
+
+        call_command("fetch_daily_billable_usage", date="2025-11-15")
+
+        # Verify database entries were created
+        usage_entries = UsageInfoModel.objects.filter(
+            allocation=allocation_1, date="2025-11-15"
+        )
+        self.assertEqual(usage_entries.count(), 3)
+
+        # Check individual SU types
+        cpu_usage = usage_entries.get(su_type="OpenStack CPU")
+        self.assertEqual(cpu_usage.value, 100.00)
+
+        gpu_usage = usage_entries.get(su_type="OpenStack GPU")
+        self.assertEqual(gpu_usage.value, 50.00)
+
+        storage_usage = usage_entries.get(su_type="Storage")
+        self.assertEqual(storage_usage.value, 30.12)
+
+        # Test update_or_create by running again with different values
+        mock_get_allocation_usage.side_effect = [
+            usage_models.UsageInfo({"OpenStack CPU": "110.00", "OpenStack GPU": "55.00"}),
+            usage_models.UsageInfo({"Storage": "35.00"}),
+        ]
+        call_command("fetch_daily_billable_usage", date="2025-11-15")
+
+        # Should still have 3 entries
+        usage_entries = UsageInfoModel.objects.filter(
+            allocation=allocation_1, date="2025-11-15"
+        )
+        self.assertEqual(usage_entries.count(), 3)
+
+        # Check updated values
+        cpu_usage = usage_entries.get(su_type="OpenStack CPU")
+        self.assertEqual(cpu_usage.value, 110.00)
+
+    @patch(
+        "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.RESOURCES_DAILY_ENABLED",
+        ["FakeProd"],
+    )
+    @patch(
+        "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.Command.get_allocation_usage"
+    )
+    def test_remove_parameter(self, mock_get_allocation_usage):
+        """Test that --remove parameter deletes usage entries for a given date."""
+        from coldfront_plugin_cloud.models import UsageInfo as UsageInfoModel
+
+        mock_get_allocation_usage.side_effect = [
+            usage_models.UsageInfo({"OpenStack CPU": "100.00"}),
+            usage_models.UsageInfo({"Storage": "30.12"}),
+        ]
+
+        fakeprod = self.new_openstack_resource(
+            name="FakeProd", internal_name="FakeProd"
+        )
+        prod_project = self.new_project()
+        allocation_1 = self.new_allocation(
+            project=prod_project, resource=fakeprod, quantity=1, status="Active"
+        )
+        utils.set_attribute_on_allocation(
+            allocation_1, attributes.ALLOCATION_PROJECT_ID, "test-allocation-1"
+        )
+
+        # First, add some data
+        call_command("fetch_daily_billable_usage", date="2025-11-15")
+        
+        # Add data for another date
+        mock_get_allocation_usage.side_effect = [
+            usage_models.UsageInfo({"OpenStack CPU": "120.00"}),
+            usage_models.UsageInfo({"Storage": "40.00"}),
+        ]
+        call_command("fetch_daily_billable_usage", date="2025-11-16")
+
+        # Verify data exists
+        self.assertEqual(
+            UsageInfoModel.objects.filter(date="2025-11-15").count(), 2
+        )
+        self.assertEqual(
+            UsageInfoModel.objects.filter(date="2025-11-16").count(), 2
+        )
+
+        # Remove data for 2025-11-15
+        call_command("fetch_daily_billable_usage", date="2025-11-15", remove=True)
+
+        # Verify data for 2025-11-15 is deleted
+        self.assertEqual(
+            UsageInfoModel.objects.filter(date="2025-11-15").count(), 0
+        )
+
+        # Verify data for 2025-11-16 still exists
+        self.assertEqual(
+            UsageInfoModel.objects.filter(date="2025-11-16").count(), 2
+        )
+
+    @patch(
+        "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.RESOURCES_DAILY_ENABLED",
+        ["FakeProd"],
+    )
+    @patch(
+        "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.Command.get_allocation_usage"
+    )
+    def test_multiple_allocations_same_date(self, mock_get_allocation_usage):
+        """Test that multiple allocations can store usage for the same date."""
+        from coldfront_plugin_cloud.models import UsageInfo as UsageInfoModel
+
+        fakeprod = self.new_openstack_resource(
+            name="FakeProd", internal_name="FakeProd"
+        )
+        prod_project1 = self.new_project()
+        prod_project2 = self.new_project()
+        
+        allocation_1 = self.new_allocation(
+            project=prod_project1, resource=fakeprod, quantity=1, status="Active"
+        )
+        allocation_2 = self.new_allocation(
+            project=prod_project2, resource=fakeprod, quantity=1, status="Active"
+        )
+        
+        utils.set_attribute_on_allocation(
+            allocation_1, attributes.ALLOCATION_PROJECT_ID, "test-allocation-1"
+        )
+        utils.set_attribute_on_allocation(
+            allocation_2, attributes.ALLOCATION_PROJECT_ID, "test-allocation-2"
+        )
+
+        # Mock returns for both allocations
+        mock_get_allocation_usage.side_effect = [
+            usage_models.UsageInfo({"OpenStack CPU": "100.00"}),
+            usage_models.UsageInfo({"Storage": "30.00"}),
+            usage_models.UsageInfo({"OpenStack CPU": "200.00"}),
+            usage_models.UsageInfo({"Storage": "50.00"}),
+        ]
+
+        call_command("fetch_daily_billable_usage", date="2025-11-15")
+
+        # Verify both allocations have data
+        alloc1_entries = UsageInfoModel.objects.filter(
+            allocation=allocation_1, date="2025-11-15"
+        )
+        alloc2_entries = UsageInfoModel.objects.filter(
+            allocation=allocation_2, date="2025-11-15"
+        )
+        
+        self.assertEqual(alloc1_entries.count(), 2)
+        self.assertEqual(alloc2_entries.count(), 2)
+        
+        # Verify values are correct for each allocation
+        self.assertEqual(
+            alloc1_entries.get(su_type="OpenStack CPU").value, 100.00
+        )
+        self.assertEqual(
+            alloc2_entries.get(su_type="OpenStack CPU").value, 200.00
+        )
