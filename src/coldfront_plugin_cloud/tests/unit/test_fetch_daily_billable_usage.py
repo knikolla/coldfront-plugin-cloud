@@ -1,4 +1,5 @@
 import io
+from decimal import Decimal
 from unittest import mock
 
 from unittest.mock import Mock, patch
@@ -279,13 +280,13 @@ class TestFetchDailyBillableUsage(base.TestBase):
 
         # Check individual SU types
         cpu_usage = usage_entries.get(su_type="OpenStack CPU")
-        self.assertEqual(cpu_usage.value, 100.00)
+        self.assertEqual(cpu_usage.value, Decimal("100.00"))
 
         gpu_usage = usage_entries.get(su_type="OpenStack GPU")
-        self.assertEqual(gpu_usage.value, 50.00)
+        self.assertEqual(gpu_usage.value, Decimal("50.00"))
 
         storage_usage = usage_entries.get(su_type="Storage")
-        self.assertEqual(storage_usage.value, 30.12)
+        self.assertEqual(storage_usage.value, Decimal("30.12"))
 
         # Test update_or_create by running again with different values
         mock_get_allocation_usage.side_effect = [
@@ -302,7 +303,7 @@ class TestFetchDailyBillableUsage(base.TestBase):
 
         # Check updated values
         cpu_usage = usage_entries.get(su_type="OpenStack CPU")
-        self.assertEqual(cpu_usage.value, 110.00)
+        self.assertEqual(cpu_usage.value, Decimal("110.00"))
 
     @patch(
         "coldfront_plugin_cloud.management.commands.fetch_daily_billable_usage.RESOURCES_DAILY_ENABLED",
@@ -416,8 +417,8 @@ class TestFetchDailyBillableUsage(base.TestBase):
         
         # Verify values are correct for each allocation
         self.assertEqual(
-            alloc1_entries.get(su_type="OpenStack CPU").value, 100.00
+            alloc1_entries.get(su_type="OpenStack CPU").value, Decimal("100.00")
         )
         self.assertEqual(
-            alloc2_entries.get(su_type="OpenStack CPU").value, 200.00
+            alloc2_entries.get(su_type="OpenStack CPU").value, Decimal("200.00")
         )
