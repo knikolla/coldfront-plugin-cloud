@@ -10,7 +10,7 @@ from typing import Optional
 from coldfront_plugin_cloud import attributes
 from coldfront.core.utils.common import import_from_settings
 from coldfront_plugin_cloud import usage_models
-from coldfront_plugin_cloud.usage_models import validate_date_str
+from coldfront_plugin_cloud.usage_models import UsageInfo, validate_date_str
 from coldfront_plugin_cloud import utils
 from coldfront_plugin_cloud.models import AllocationDailyBillableUsage
 
@@ -225,7 +225,7 @@ class Command(BaseCommand):
 
     def get_allocation_usage(
         self, resource: str, date_str: str, allocation_id
-    ) -> usage_models.UsageInfo:
+    ) -> UsageInfo:
         """Loads the service invoice and parse UsageInfo for a specific allocation."""
         invoice = self.load_service_invoice(resource, date_str)
 
@@ -235,9 +235,9 @@ class Command(BaseCommand):
             ]
         except KeyError:
             logger.debug(f"No usage for allocation {allocation_id}.")
-            return usage_models.UsageInfo({})
+            return UsageInfo({})
 
-        return usage_models.UsageInfo(
+        return UsageInfo(
             df.set_index(INVOICE_COLUMN_SU_TYPE)[INVOICE_COLUMN_COST].to_dict()
         )
 
