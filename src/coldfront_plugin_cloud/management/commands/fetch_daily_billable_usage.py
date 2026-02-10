@@ -10,8 +10,9 @@ from typing import Optional
 from coldfront_plugin_cloud import attributes
 from coldfront.core.utils.common import import_from_settings
 from coldfront_plugin_cloud import usage_models
-from coldfront_plugin_cloud.usage_models import UsageInfo, validate_date_str
+from coldfront_plugin_cloud.usage_models import validate_date_str
 from coldfront_plugin_cloud import utils
+from coldfront_plugin_cloud.models import UsageInfo as UsageInfoModel
 
 import boto3
 from django.core.management.base import BaseCommand
@@ -85,10 +86,20 @@ class Command(BaseCommand):
         parser.add_argument(
             "--date", type=str, default=self.previous_day_string, help="Date."
         )
+        parser.add_argument(
+            "--remove",
+            action="store_true",
+            help="Remove usage entries for the specified date instead of fetching.",
+        )
 
     def handle(self, *args, **options):
         date = options["date"]
         validate_date_str(date)
+        remove = options.get("remove", False)
+
+        if remove:
+            self.handle_remove(date)
+            return
 
         allocations = self.get_allocations_for_daily_billing()
 
@@ -121,6 +132,9 @@ class Command(BaseCommand):
                     f"Unable to get daily billable usage from {resource.name}, skipping {allocation_project_id}: {e}"
                 )
                 continue
+
+            # Store usage information in the database
+            self.store_usage_in_database(allocation, date, new_usage)
 
             # Only update the latest value if the processed date is newer or same date.
             if not previous_total or date >= previous_total.date:
@@ -212,7 +226,7 @@ class Command(BaseCommand):
 
     def get_allocation_usage(
         self, resource: str, date_str: str, allocation_id
-    ) -> UsageInfo:
+    ) -> usage_models.UsageInfo:
         """Loads the service invoice and parse UsageInfo for a specific allocation."""
         invoice = self.load_service_invoice(resource, date_str)
 
@@ -222,9 +236,9 @@ class Command(BaseCommand):
             ]
         except KeyError:
             logger.debug(f"No usage for allocation {allocation_id}.")
-            return UsageInfo({})
+            return usage_models.UsageInfo({})
 
-        return UsageInfo(
+        return usage_models.UsageInfo(
             df.set_index(INVOICE_COLUMN_SU_TYPE)[INVOICE_COLUMN_COST].to_dict()
         )
 
@@ -300,3 +314,35 @@ class Command(BaseCommand):
                 if x != allocation.project.pi.email
             ],
         )
+
+    @staticmethod
+    def store_usage_in_database(allocation: Allocation, date: str, usage_info):
+        """Store usage information in the database for each SU type.
+        
+        Args:
+            allocation: The allocation to store usage for
+            date: The date string in YYYY-MM-DD format
+            usage_info: UsageInfo pydantic model instance with SU type charges
+        """
+        for su_type, value in usage_info.root.items():
+            UsageInfoModel.objects.update_or_create(
+                allocation=allocation,
+                date=date,
+                su_type=su_type,
+                defaults={'value': value}
+            )
+        logger.info(
+            f"Stored usage data for allocation {allocation.id} on {date}: "
+            f"{len(usage_info.root)} SU types"
+        )
+
+    @staticmethod
+    def handle_remove(date: str):
+        """Remove all usage entries for the specified date.
+        
+        Args:
+            date: The date string in YYYY-MM-DD format for which to remove entries
+        """
+        deleted_count, _ = UsageInfoModel.objects.filter(date=date).delete()
+        logger.info(f"Removed {deleted_count} usage entries for date {date}")
+        print(f"Removed {deleted_count} usage entries for date {date}")
