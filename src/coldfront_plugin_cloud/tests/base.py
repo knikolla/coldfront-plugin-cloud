@@ -26,14 +26,36 @@ from django.core.management import call_command
 
 
 class TestBase(TestCase):
-    def setUp(self) -> None:
+    # Class attribute to control whether to register cloud attributes during setup
+    # Set to False in subclasses that need to test attribute migration behavior
+    _register_attributes_on_setup = True
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Set up test data once for all tests in the class.
+        
+        This method is called once before any tests in the class run, and is
+        wrapped in an atomic transaction by Django. This is more efficient than
+        setUpClass for database operations and follows Django best practices.
+        """
+        cls._run_setup_commands()
+
+    @classmethod
+    def _run_setup_commands(cls) -> None:
+        """Run database initialization commands.
+        
+        The _register_attributes_on_setup class attribute controls whether
+        the register_cloud_attributes command is run during setup.
+        """
         # Otherwise output goes to the terminal for every test that is run
         backup, sys.stdout = sys.stdout, open(devnull, "a")
         call_command("initial_setup", "-f")
         call_command("load_test_data")
-        call_command("register_cloud_attributes")
+        if cls._register_attributes_on_setup:
+            call_command("register_cloud_attributes")
         sys.stdout = backup
 
+    def setUp(self) -> None:
         # For testing we can validate allocations with this status
         AllocationStatusChoice.objects.get_or_create(name="Active (Needs Renewal)")
 
