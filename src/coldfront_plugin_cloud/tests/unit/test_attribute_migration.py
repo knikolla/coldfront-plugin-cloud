@@ -12,8 +12,13 @@ from django.core.management import call_command
 
 
 class TestAttributeMigration(base.TestBase):
-    def setUp(self) -> None:
+    @classmethod
+    def setUpClass(cls) -> None:
         # Run initial setup but do not register the attributes
+        # Note: We override parent's setUpClass to skip register_cloud_attributes
+        # so we can test the migration behavior
+        from django.test import TestCase
+        TestCase.setUpClass.__func__(cls)
         backup, sys.stdout = sys.stdout, open(devnull, "a")
         call_command("initial_setup", "-f")
         call_command("load_test_data")

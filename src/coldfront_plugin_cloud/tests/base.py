@@ -26,7 +26,9 @@ from django.core.management import call_command
 
 
 class TestBase(TestCase):
-    def setUp(self) -> None:
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
         # Otherwise output goes to the terminal for every test that is run
         backup, sys.stdout = sys.stdout, open(devnull, "a")
         call_command("initial_setup", "-f")
@@ -34,6 +36,7 @@ class TestBase(TestCase):
         call_command("register_cloud_attributes")
         sys.stdout = backup
 
+    def setUp(self) -> None:
         # For testing we can validate allocations with this status
         AllocationStatusChoice.objects.get_or_create(name="Active (Needs Renewal)")
 
