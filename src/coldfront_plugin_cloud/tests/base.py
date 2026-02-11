@@ -27,13 +27,24 @@ from django.core.management import call_command
 
 class TestBase(TestCase):
     @classmethod
-    def setUpClass(cls) -> None:
+    def setUpClass(cls, register_attributes=True) -> None:
         super().setUpClass()
+        cls._run_setup_commands(register_attributes)
+
+    @classmethod
+    def _run_setup_commands(cls, register_attributes=True) -> None:
+        """Run database initialization commands.
+        
+        Args:
+            register_attributes: If True, runs register_cloud_attributes command.
+                                Set to False for attribute migration tests.
+        """
         # Otherwise output goes to the terminal for every test that is run
         backup, sys.stdout = sys.stdout, open(devnull, "a")
         call_command("initial_setup", "-f")
         call_command("load_test_data")
-        call_command("register_cloud_attributes")
+        if register_attributes:
+            call_command("register_cloud_attributes")
         sys.stdout = backup
 
     def setUp(self) -> None:
