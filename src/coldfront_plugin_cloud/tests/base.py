@@ -26,24 +26,27 @@ from django.core.management import call_command
 
 
 class TestBase(TestCase):
-    @classmethod
-    def setUpClass(cls, register_attributes=True) -> None:
-        super().setUpClass()
-        cls._run_setup_commands(register_attributes)
+    # Class attribute to control whether to register cloud attributes during setup
+    # Set to False in subclasses that need to test attribute migration behavior
+    _register_attributes_on_setup = True
 
     @classmethod
-    def _run_setup_commands(cls, register_attributes=True) -> None:
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._run_setup_commands()
+
+    @classmethod
+    def _run_setup_commands(cls) -> None:
         """Run database initialization commands.
         
-        Args:
-            register_attributes: If True, runs register_cloud_attributes command.
-                                Set to False for attribute migration tests.
+        The _register_attributes_on_setup class attribute controls whether
+        the register_cloud_attributes command is run during setup.
         """
         # Otherwise output goes to the terminal for every test that is run
         backup, sys.stdout = sys.stdout, open(devnull, "a")
         call_command("initial_setup", "-f")
         call_command("load_test_data")
-        if register_attributes:
+        if cls._register_attributes_on_setup:
             call_command("register_cloud_attributes")
         sys.stdout = backup
 

@@ -12,11 +12,8 @@ from django.core.management import call_command
 
 
 class TestAttributeMigration(base.TestBase):
-    @classmethod
-    def setUpClass(cls) -> None:
-        # Skip register_cloud_attributes so we can test the migration behavior
-        super(base.TestBase, cls).setUpClass()
-        cls._run_setup_commands(register_attributes=False)
+    # Skip register_cloud_attributes so we can test the migration behavior
+    _register_attributes_on_setup = False
 
     @mock.patch.object(
         register_cloud_attributes,
