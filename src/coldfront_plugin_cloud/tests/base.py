@@ -31,8 +31,13 @@ class TestBase(TestCase):
     _register_attributes_on_setup = True
 
     @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
+    def setUpTestData(cls) -> None:
+        """Set up test data once for all tests in the class.
+        
+        This method is called once before any tests in the class run, and is
+        wrapped in an atomic transaction by Django. This is more efficient than
+        setUpClass for database operations and follows Django best practices.
+        """
         cls._run_setup_commands()
 
     @classmethod
