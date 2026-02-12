@@ -16,11 +16,20 @@ rm -rf "$test_dir"
 mkdir -p "$test_dir"
 
 echo "::group::Install MINC"
-# Download and install MINC CLI
+# Download and install MINC CLI from GitHub releases
+# Using HTTPS from GitHub provides transport security
 curl -L -o /tmp/minc https://github.com/minc-org/minc/releases/latest/download/minc_linux_amd64
 chmod +x /tmp/minc
+
+# Verify the binary is executable and shows version
+if ! /tmp/minc version 2>&1; then
+    echo "ERROR: Downloaded MINC binary is not valid"
+    exit 1
+fi
+
 sudo mv /tmp/minc /usr/local/bin/minc
-minc version || true
+echo "MINC installed successfully:"
+minc version
 echo "::endgroup::"
 
 echo "::group::Configure MINC"
@@ -38,25 +47,33 @@ sudo minc delete || true
 sudo minc create
 
 # Wait for cluster to be ready
+cluster_ready=false
 for try in {1..30}; do
     echo "Checking cluster status (attempt $try/30)..."
     if sudo minc status | grep -q '"apiserver": "running"'; then
         echo "MicroShift cluster is running!"
+        cluster_ready=true
         break
     fi
     sleep 10
 done
+
+if [ "$cluster_ready" = false ]; then
+    echo "ERROR: MicroShift cluster failed to start after 5 minutes"
+    sudo minc status || true
+    exit 1
+fi
 echo "::endgroup::"
 
 echo "::group::Setup kubeconfig"
 # Generate kubeconfig
 sudo minc generate-kubeconfig
 
-# MINC places kubeconfig in ~/.kube/config by default
+# MINC places kubeconfig in /root/.kube/config when run with sudo
 # Copy it to our desired location
 KUBECONFIG_FULL_PATH="$(readlink -f "$KUBECONFIG")"
 mkdir -p "${KUBECONFIG_FULL_PATH%/*}"
-sudo cp ~/.kube/config "${KUBECONFIG}"
+sudo cp /root/.kube/config "${KUBECONFIG}"
 sudo chown $(id -u):$(id -g) "${KUBECONFIG}"
 
 # Setup /etc/hosts entry for onboarding service
