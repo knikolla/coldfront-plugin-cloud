@@ -20,7 +20,7 @@ echo "::group::Start microshift container"
 sudo docker run -d --rm --name microshift --privileged \
     --hostname microshift \
     -v microshift-data:/var/lib \
-    quay.io/microshift/microshift-aio:latest
+    quay.io/microshift/microshift:latest
 echo "::endgroup::"
 
 microshift_addr=$(sudo docker inspect microshift -f '{{ .NetworkSettings.IPAddress }}')
