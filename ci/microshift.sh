@@ -18,12 +18,14 @@ sudo docker volume rm -f microshift-data
 
 echo "::group::Start microshift container"
 sudo docker run -d --rm --name microshift --privileged \
+    --network=host \
     --hostname microshift \
     -v microshift-data:/var/lib \
     quay.io/microshift/microshift:latest
 echo "::endgroup::"
 
-microshift_addr=$(sudo docker inspect microshift -f '{{ .NetworkSettings.IPAddress }}')
+# With host networking, microshift is accessible on localhost
+microshift_addr="127.0.0.1"
 sudo sed -i '/onboarding-onboarding.cluster.local/d' /etc/hosts
 echo "$microshift_addr  onboarding-onboarding.cluster.local" | sudo tee -a /etc/hosts
 
