@@ -1,89 +1,55 @@
 #!/bin/bash
 
 #
-# Installs MicroShift using MINC (MicroShift in Container)
-# MINC: https://github.com/minc-org/minc
+# Installs MicroShift on Docker
+#
+# NOTE: This uses the deprecated microshift-aio image (OpenShift 4.8 from 2022)
+# because modern MicroShift versions (4.18+) exclude OpenShift-specific APIs
+# (project.openshift.io/v1, user.openshift.io/v1) that are required for functional tests.
+#
+# Modern MicroShift is designed to be a minimal Kubernetes distribution and doesn't
+# include full OpenShift APIs. The tests require these APIs for project, user, and
+# identity management.
 #
 set -xe
 
 : "${ACCT_MGT_VERSION:="master"}"
 : "${ACCT_MGT_REPOSITORY:="https://github.com/cci-moc/openshift-acct-mgt.git"}"
 : "${KUBECONFIG:=$HOME/.kube/config}"
-: "${MINC_VERSION:="4.18.0-okd-scos.9"}"  # Modern OpenShift version
 
 test_dir="$PWD/testdata"
 rm -rf "$test_dir"
 mkdir -p "$test_dir"
 
-echo "::group::Install MINC"
-# Download and install MINC CLI from GitHub releases
-# Using HTTPS from GitHub provides transport security
-curl -L -o /tmp/minc https://github.com/minc-org/minc/releases/latest/download/minc_linux_amd64
-chmod +x /tmp/minc
+sudo docker rm -f microshift
+sudo docker volume rm -f microshift-data
 
-# Verify the binary is executable and shows version
-if ! /tmp/minc version 2>&1; then
-    echo "ERROR: Downloaded MINC binary is not valid"
-    exit 1
-fi
-
-sudo mv /tmp/minc /usr/local/bin/minc
-echo "MINC installed successfully:"
-minc version
+echo "::group::Start microshift container"
+sudo docker run -d --rm --name microshift --privileged \
+    --hostname microshift \
+    -v microshift-data:/var/lib \
+    quay.io/microshift/microshift-aio:latest
 echo "::endgroup::"
 
-echo "::group::Configure MINC"
-# Configure MINC to use Docker instead of Podman
-minc config set provider docker
-minc config set microshift-version "${MINC_VERSION}"
-minc config set log-level info
-echo "::endgroup::"
-
-echo "::group::Start MicroShift cluster"
-# Clean up any existing cluster
-sudo minc delete || true
-
-# Create new MicroShift cluster
-sudo minc create
-
-# Wait for cluster to be ready
-cluster_ready=false
-for try in {1..30}; do
-    echo "Checking cluster status (attempt $try/30)..."
-    if sudo minc status | grep -q '"apiserver": "running"'; then
-        echo "MicroShift cluster is running!"
-        cluster_ready=true
-        break
-    fi
-    sleep 10
-done
-
-if [ "$cluster_ready" = false ]; then
-    echo "ERROR: MicroShift cluster failed to start after 5 minutes"
-    sudo minc status || true
-    exit 1
-fi
-echo "::endgroup::"
-
-echo "::group::Setup kubeconfig"
-# Generate kubeconfig
-sudo minc generate-kubeconfig
-
-# MINC places kubeconfig in /root/.kube/config when run with sudo
-# Copy it to our desired location
-KUBECONFIG_FULL_PATH="$(readlink -f "$KUBECONFIG")"
-mkdir -p "${KUBECONFIG_FULL_PATH%/*}"
-sudo cp /root/.kube/config "${KUBECONFIG}"
-sudo chown $(id -u):$(id -g) "${KUBECONFIG}"
-
-# Setup /etc/hosts entry for onboarding service
-microshift_addr="127.0.0.1"
+microshift_addr=$(sudo docker inspect microshift -f '{{ .NetworkSettings.IPAddress }}')
 sudo sed -i '/onboarding-onboarding.cluster.local/d' /etc/hosts
 echo "$microshift_addr  onboarding-onboarding.cluster.local" | sudo tee -a /etc/hosts
 
-# Verify cluster access
+KUBECONFIG_FULL_PATH="$(readlink -f "$KUBECONFIG")"
+mkdir -p "${KUBECONFIG_FULL_PATH%/*}"
+
+echo "::group::Wait for Microshift"
+for try in {0..10}; do
+	echo "copying kubeconfig {$try}"
+	sudo docker cp microshift:/var/lib/microshift/resources/kubeadmin/kubeconfig \
+		"${KUBECONFIG}" && break
+	sleep 2
+done
+
+sed -i "s/127.0.0.1/${microshift_addr}/g" "$KUBECONFIG"
+
 while ! oc get route -A; do
-    echo "Waiting for MicroShift API to be accessible..."
+    echo "Waiting for Microshift"
     sleep 5
 done
 echo "::endgroup::"
